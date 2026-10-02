@@ -1,36 +1,52 @@
 name: Compilar APK
+
 on:
   push:
     branches: [main]
   workflow_dispatch:
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
+
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Preparar projeto
+
+      - name: Preparar projeto (usa o zip mais novo)
         run: |
-          if [ -f memoria-android.zip ]; then
-            mkdir _proj && unzip -q memoria-android.zip -d _proj
+          best=""; bestn=-1
+          for f in memoria-android*.zip; do
+            [ -f "$f" ] || continue
+            n=$(echo "$f" | sed -n 's/^memoria-android-\([0-9][0-9]*\)\.zip$/\1/p')
+            [ -z "$n" ] && n=0
+            if [ "$n" -gt "$bestn" ]; then best="$f"; bestn=$n; fi
+          done
+          echo "Usando: $best"
+          if [ -n "$best" ]; then
+            mkdir _proj && unzip -q "$best" -d _proj
             echo "DIR=_proj" >> "$GITHUB_ENV"
           else
             echo "DIR=." >> "$GITHUB_ENV"
           fi
+
       - name: Aceitar licenças do Android SDK
         run: yes | sdkmanager --licenses > /dev/null || true
+
       - name: Compilar
         run: |
           cd "$DIR"
           gradle assembleDebug --no-daemon
           mkdir -p "$GITHUB_WORKSPACE/out"
           cp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/out/memoria.apk"
+
       - uses: actions/upload-artifact@v4
         with:
           name: memoria-apk
